@@ -15,6 +15,7 @@ develop a new k8s charm using the Operator Framework:
 import logging
 
 import requests
+from charms.data_platform_libs.v0.database_requires import DatabaseCreatedEvent, DatabaseRequires
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -29,12 +30,46 @@ class FastAPIDemoCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.app_environment = {}
         self.pebble_service_name = "fastapi-service"
         self.container = self.unit.get_container(
             "demo-server"
         )  # see 'containers' in metadata.yaml
+        # Charm events defined in the database requires charm library.
+        self.database = DatabaseRequires(self, relation_name="database", database_name="names_db")
+        self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(self.database.on.endpoints_changed, self._on_database_created)
+        self.framework.observe(
+            self.on.database_relation_broken, self._on_database_relation_removed
+        )
+
         self.framework.observe(self.on.demo_server_pebble_ready, self._update_layer_and_restart)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        """Set `app_environment` with info from database charm and update pebble layer.
+
+        Event is fired when postgres database was created.
+        """
+        logger.info("New PSQL database endpoint is %s", event.endpoints)
+        host, port = event.endpoints.split(":")
+        self.app_environment = {
+            "DEMO_SERVER_DB_HOST": host,
+            "DEMO_SERVER_DB_PORT": port,
+            "DEMO_SERVER_DB_USER": event.username,
+            "DEMO_SERVER_DB_PASSWORD": event.password,
+        }
+
+        self._update_layer_and_restart(None)
+
+    def _on_database_relation_removed(self, event) -> None:
+        """Reset `app_environment` and put charm into waiting status.
+
+        Event is fired when relation with postgres is broken.
+        """
+        self.app_environment = {}
+
+        self.unit.status = WaitingStatus("Waiting for database relation")
 
     def _on_config_changed(self, event):
         port = self.config["server-port"]  # see config.yaml
@@ -97,6 +132,7 @@ class FastAPIDemoCharm(CharmBase):
                     "summary": "fastapi demo",
                     "command": command,
                     "startup": "enabled",
+                    "environment": self.app_environment,
                 }
             },
         }
