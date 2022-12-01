@@ -12,6 +12,10 @@ description: |
 summary: |
   FastAPI Demo charm for Kubernetes
 
+assumes:
+  - juju >= 3.0
+  - k8s-api
+
 # The containers and resources metadata apply to Kubernetes charms only.
 # Remove them if not required.
 
