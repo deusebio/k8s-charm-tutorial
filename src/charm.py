@@ -15,7 +15,7 @@ develop a new k8s charm using the Operator Framework:
 import logging
 
 import requests
-from charms.data_platform_libs.v0.database_requires import DatabaseCreatedEvent, DatabaseRequires
+from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
